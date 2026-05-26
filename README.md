@@ -1,200 +1,190 @@
-# Backend — Clima vs Redes Sociales
+# API Clima vs Redes Sociales — Backend
 
-API FastAPI para el proyecto final de Programación de Páginas Electrónicas y Aplicaciones Móviles.
-**Contexto:** análisis del impacto de la temperatura del clima en el uso de redes sociales.
+Servicio REST desarrollado en FastAPI para el análisis predictivo del impacto de variables climáticas sobre métricas de uso de redes sociales. Forma parte del proyecto final del curso 125 — Programación de Páginas Electrónicas y Aplicaciones Móviles, carrera Ingeniería en Ciencia de Datos y Analítica, Universidad Mariano Gálvez de Guatemala.
 
----
+## Descripción funcional
 
-## 📦 Estructura
+El backend expone una API HTTP con tres capacidades principales:
+
+1. Autenticación de usuarios mediante JSON Web Tokens firmados con HS256.
+2. Predicción multi-output (minutos de uso, publicaciones, engagement) a partir de un modelo de Random Forest entrenado sobre un dataset sintético derivado de hipótesis de estudios de comportamiento digital.
+3. Registro y consulta de eventos de telemetría provenientes de la aplicación móvil cliente.
+
+La persistencia de usuarios, eventos y predicciones se realiza sobre MongoDB Atlas. Los artefactos del modelo (CSV de entrenamiento y bundle joblib) se generan en tiempo de build.
+
+## Stack tecnológico
+
+| Componente | Tecnología |
+|------------|------------|
+| Framework HTTP | FastAPI 0.115 |
+| Servidor ASGI | Uvicorn |
+| Autenticación | PyJWT + bcrypt |
+| Base de datos | MongoDB Atlas (pymongo) |
+| Modelo predictivo | scikit-learn (RandomForestRegressor multi-output) |
+| Procesamiento de datos | pandas, numpy |
+| Hosting | Render.com (plan free) |
+| Python | 3.11 |
+
+## Estructura del proyecto
 
 ```
 backend/
-├── main.py                  # API FastAPI (endpoints)
-├── auth.py                  # JWT + bcrypt
-├── database.py              # Conexión MongoDB Atlas
-├── schemas.py               # Pydantic models
-├── ml_model.py              # Entrenamiento y predicción
-├── dataset_generator.py     # Genera CSV sintético
-├── requirements.txt
-├── render.yaml              # Configuración Render.com
-├── .env.example
+├── main.py                   API y definición de endpoints
+├── auth.py                   Hashing de contraseñas y emisión de JWT
+├── database.py               Cliente MongoDB y helpers por colección
+├── schemas.py                Modelos Pydantic de entrada y salida
+├── ml_model.py               Entrenamiento, persistencia y predicción
+├── dataset_generator.py      Generación del dataset sintético
+├── requirements.txt          Dependencias pineadas
+├── render.yaml               Blueprint de despliegue
+├── .env.example              Plantilla de variables de entorno
+├── .gitignore
 └── data/
-    ├── clima_redes_sociales.csv   (generado)
+    ├── clima_redes_sociales.csv    (generado)
     └── model.joblib                (generado)
 ```
 
----
+## Prerequisitos
 
-## 🚀 Correr en local
+- Python 3.11
+- Cuenta en MongoDB Atlas con un cluster M0 aprovisionado
+- Cuenta en GitHub
+- Cuenta en Render.com
 
-### 1. Crear entorno virtual e instalar dependencias
+## Instalación local
 
 ```bash
 python -m venv venv
-
-# Windows
-venv\Scripts\activate
-# macOS / Linux
-source venv/bin/activate
+source venv/bin/activate      # Linux/macOS
+venv\Scripts\activate         # Windows
 
 pip install -r requirements.txt
 ```
 
-### 2. Configurar variables de entorno
+## Variables de entorno
 
-Copia `.env.example` a `.env` y completa:
-- `MONGO_URI` — connection string de MongoDB Atlas (ver más abajo)
-- `JWT_SECRET` — un string aleatorio largo
+Copiar `.env.example` a `.env` y completar:
 
-En Windows PowerShell, antes de correr:
-```powershell
-$env:MONGO_URI="mongodb+srv://..."
-$env:JWT_SECRET="mi-secreto-super-largo"
-```
+| Variable | Descripción |
+|----------|-------------|
+| `MONGO_URI` | Connection string SRV de MongoDB Atlas |
+| `MONGO_DB` | Nombre de la base de datos (por defecto `clima_redes`) |
+| `JWT_SECRET` | Secreto para firmar tokens, mínimo recomendado 32 caracteres |
 
-En bash:
-```bash
-export MONGO_URI="mongodb+srv://..."
-export JWT_SECRET="mi-secreto-super-largo"
-```
-
-### 3. Levantar el servidor
+## Ejecución
 
 ```bash
 uvicorn main:app --reload
 ```
 
-En el primer arranque genera automáticamente el dataset (~8000 filas) y entrena el modelo (~30 segundos). Las próximas veces ya están cacheados.
+En el primer arranque, si los archivos `data/clima_redes_sociales.csv` y `data/model.joblib` no existen, se generan automáticamente: dataset de 8000 registros y modelo entrenado con un 20% de holdout para evaluación. Las ejecuciones posteriores reutilizan los artefactos persistidos.
 
-Abrir: **http://localhost:8000/docs** → Swagger UI interactivo.
+Documentación interactiva (OpenAPI / Swagger UI) disponible en `http://localhost:8000/docs`.
 
----
+## Configuración de MongoDB Atlas
 
-## 🗄️ Configurar MongoDB Atlas (gratis)
+1. Crear un cluster M0 en https://cloud.mongodb.com.
+2. En `Database Access`, crear un usuario con privilegios de lectura y escritura.
+3. En `Network Access`, agregar la entrada `0.0.0.0/0` para permitir conexiones entrantes desde Render.
+4. Desde el botón `Connect > Drivers > Python`, copiar el connection string SRV y reemplazar `<db_password>` por la contraseña real del usuario creado.
 
-1. Ir a https://cloud.mongodb.com → registrarse
-2. Crear un **Cluster M0 (Free)** — región más cercana
-3. **Database Access** → crear usuario con password
-4. **Network Access** → Add IP → `0.0.0.0/0` (allow from anywhere)
-5. **Connect** → Drivers → Python → copiar el connection string
-6. Reemplazar `<password>` por la password real del usuario que creaste
-7. Pegar en tu `.env` como `MONGO_URI`
+## Despliegue en Render
 
----
+El repositorio incluye `render.yaml` con la definición completa del Blueprint. Procedimiento:
 
-## ☁️ Desplegar en Render.com
+1. Push del repositorio a GitHub.
+2. En Render: `Add new > Blueprint > Connect repository`.
+3. Render detecta el `render.yaml` y solicita los valores de las variables marcadas con `sync: false`. Pegar el connection string en `MONGO_URI`.
+4. Las variables `JWT_SECRET` se autogenera, `MONGO_DB` y `PYTHON_VERSION` quedan definidas por el Blueprint.
+5. Confirmar y aplicar.
 
-### Opción A — con render.yaml (recomendado)
+El comando de build instala dependencias, ejecuta el generador del dataset y entrena el modelo, dejando los artefactos disponibles antes del start. Duración aproximada del primer deploy: 5 a 8 minutos.
 
-1. Subir esta carpeta a un repositorio de GitHub
-2. Ir a https://render.com → New → Blueprint
-3. Conectar el repo → Render detecta `render.yaml`
-4. Te pedirá rellenar el `MONGO_URI` (porque tiene `sync: false`) — pégalo
-5. Deploy automático
+El plan free de Render suspende la instancia tras 15 minutos sin tráfico. El primer request posterior a la suspensión tarda aproximadamente 30 segundos en responder mientras el servicio se reactiva.
 
-### Opción B — manual
+## Endpoints
 
-1. https://render.com → New → Web Service
-2. Conectar repo
-3. Configurar:
-   - **Build Command:** `pip install -r requirements.txt && python dataset_generator.py && python ml_model.py`
-   - **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
-   - **Environment Variables:**
-     - `MONGO_URI` = tu connection string
-     - `MONGO_DB` = `clima_redes`
-     - `JWT_SECRET` = string aleatorio largo
-4. Deploy
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET    | `/`                    | No | Health check y estado de la conexión a MongoDB |
+| POST   | `/auth/register`       | No | Registro de usuario |
+| POST   | `/auth/login`          | No | Autenticación y emisión de token |
+| POST   | `/predict`             | Sí | Predicción de uso, publicaciones y engagement |
+| GET    | `/correlation`         | No | Coeficientes de correlación Pearson |
+| GET    | `/model/info`          | No | Metadatos del modelo y métricas de validación |
+| POST   | `/analytics/log`       | Sí | Registro de evento de telemetría |
+| GET    | `/analytics/summary`   | No | Agregados por tipo de evento, pantalla y fecha |
+| GET    | `/analytics/events`    | No | Listado paginado de eventos |
+| GET    | `/data/insights`       | No | Agregados del dataset por rango térmico, hora y día |
+| GET    | `/data/scatter`        | No | Muestra para gráfico de dispersión |
 
-Te queda una URL pública estilo: `https://clima-redes-api.onrender.com`
+## Pruebas
 
-> ⚠️ **Nota Render free:** la instancia se "duerme" tras 15 min sin tráfico y tarda ~30s en despertar al primer request. Para la demo, hacer un request de "calentamiento" antes de empezar.
+### Registro y obtención de token
 
----
-
-## 🧪 Probar la API
-
-### Con el Swagger UI
-Abrir `/docs` y probar interactivamente todos los endpoints.
-
-### Con curl
-
-**1. Registrar usuario**
 ```bash
-curl -X POST http://localhost:8000/auth/register \
+curl -X POST https://<host>/auth/register \
   -H "Content-Type: application/json" \
   -d '{"username":"luis","email":"luis@umg.edu","password":"1234"}'
 ```
 
 Respuesta:
+
 ```json
-{"access_token":"eyJhbGc...", "token_type":"bearer", "username":"luis"}
+{"access_token":"eyJhbGc...","token_type":"bearer","username":"luis"}
 ```
 
-**2. Login (si ya existe el usuario)**
-```bash
-curl -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"luis","password":"1234"}'
-```
+### Predicción
 
-**3. Predicción** (usar el token del paso anterior)
 ```bash
-TOKEN="eyJhbGc..."
-curl -X POST http://localhost:8000/predict \
-  -H "Authorization: Bearer $TOKEN" \
+curl -X POST https://<host>/predict \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"temperatura_c":35,"humedad_pct":70,"hora":21,"dia_semana":5}'
 ```
 
-**4. Correlaciones**
+### Correlaciones
+
 ```bash
-curl http://localhost:8000/correlation
+curl https://<host>/correlation
 ```
 
-**5. Insights del dataset**
-```bash
-curl http://localhost:8000/data/insights
-```
+### Registro de evento de telemetría
 
-**6. Registrar evento (analítica)**
 ```bash
-curl -X POST http://localhost:8000/analytics/log \
-  -H "Authorization: Bearer $TOKEN" \
+curl -X POST https://<host>/analytics/log \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"event_type":"screen_view","screen":"prediction","metadata":{"source":"test"}}'
+  -d '{"event_type":"screen_view","screen":"prediction","metadata":{}}'
 ```
 
-**7. Resumen de analítica**
-```bash
-curl http://localhost:8000/analytics/summary
-```
+## Modelo predictivo
 
----
+- Algoritmo: `RandomForestRegressor` multi-output (scikit-learn).
+- Hiperparámetros: 150 estimadores, profundidad máxima 14, mínimo 3 muestras por hoja, semilla fija 42.
+- Features: temperatura (°C), humedad relativa (%), hora del día (0–23), día de la semana (0=Lunes, 6=Domingo), indicador binario de fin de semana.
+- Targets: minutos de uso diario, número de publicaciones, engagement total (suma de likes y comentarios).
+- Métricas sobre conjunto de validación (20% holdout):
+  - `uso_minutos`: R² ≈ 0.87, MAE ≈ 6.2 minutos.
+  - `engagement`: R² ≈ 0.80, MAE ≈ 14.7 interacciones.
+  - `posts_publicados`: R² ≈ 0.50 (variable con mayor componente estocástico).
 
-## 📋 Endpoints disponibles
+Observación metodológica: la correlación lineal (Pearson) entre temperatura y minutos de uso es de magnitud moderada (~0.33 en valor absoluto), debido a que la relación subyacente es no lineal y de forma cuasi-cuadrática con mínimo cercano a la temperatura de confort (22 °C). Un modelo lineal subestima esta dependencia; el ensamble de árboles la captura adecuadamente.
 
-| Método | Endpoint | Auth | Descripción |
-|--------|----------|------|-------------|
-| GET    | `/`                    | No  | Health check |
-| POST   | `/auth/register`       | No  | Registrar usuario |
-| POST   | `/auth/login`          | No  | Iniciar sesión |
-| POST   | `/predict`             | Sí  | Predecir uso de redes |
-| GET    | `/correlation`         | No  | Correlaciones Pearson |
-| GET    | `/model/info`          | No  | Info y métricas del modelo |
-| POST   | `/analytics/log`       | Sí  | Registrar evento de la app móvil |
-| GET    | `/analytics/summary`   | No  | Resumen agregado de eventos |
-| GET    | `/analytics/events`    | No  | Listado paginado de eventos |
-| GET    | `/data/insights`       | No  | Insights del dataset histórico |
-| GET    | `/data/scatter`        | No  | Muestra para gráfico de dispersión |
+## Dataset
 
----
+Dataset sintético de 8000 observaciones generado de manera determinística (semilla fija = 42) a partir de un modelo paramétrico que combina:
 
-## 🧠 Sobre el modelo
+- Componente no lineal de temperatura centrada en 22 °C, representando la zona de confort térmico.
+- Componente lineal moderado, asociado al uso de climatización en interiores.
+- Patrón circadiano con pico nocturno alrededor de las 21h y pico matutino secundario.
+- Efecto incremental en fines de semana.
+- Efecto marginal de humedad relativa.
+- Ruido gaussiano residual.
 
-- **Tipo:** RandomForestRegressor (multi-output)
-- **Features:** temperatura, humedad, hora, día de la semana, es fin de semana
-- **Targets:** minutos de uso, posts publicados, engagement
-- **Métricas típicas tras entrenar:** R² > 0.80 para uso_minutos
-- **Hallazgo clave:** la correlación lineal (Pearson) temperatura ↔ uso es **baja**, porque la relación real es **no-lineal en forma de U** (más uso en extremos térmicos). El Random Forest captura este patrón que un modelo lineal no podría.
+La generación es reproducible. La especificación completa se encuentra en `dataset_generator.py`.
 
-Este hallazgo es excelente para vender la presentación ejecutiva: "Un análisis lineal habría concluido que no hay relación. Nuestro modelo no lineal demuestra que sí la hay, y la cuantifica."
+## Autor
+
+Luis Chali — Ingeniería en Ciencia de Datos y Analítica
+Universidad Mariano Gálvez de Guatemala, 2026
