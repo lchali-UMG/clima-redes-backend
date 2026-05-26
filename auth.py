@@ -1,18 +1,22 @@
 """
 Autenticacion: JWT (PyJWT) + hashing de password con bcrypt.
+
+Esquema de seguridad: HTTPBearer. El cliente envia el JWT en el header
+Authorization: Bearer <token>. Para obtener el token usar /auth/register
+o /auth/login y copiar el campo access_token de la respuesta.
 """
 import os
 import jwt
 import bcrypt
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me-in-production")
 JWT_ALG = "HS256"
 JWT_EXPIRE_HOURS = 24
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
@@ -45,7 +49,7 @@ def decode_token(token: str) -> str:
         raise HTTPException(status_code=401, detail="Token invalido")
 
 
-def current_user(token: str = Depends(oauth2_scheme)) -> str:
-    if not token:
+def current_user(creds: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> str:
+    if not creds or not creds.credentials:
         raise HTTPException(status_code=401, detail="No autenticado")
-    return decode_token(token)
+    return decode_token(creds.credentials)
