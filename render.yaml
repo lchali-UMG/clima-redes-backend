@@ -3,10 +3,11 @@ services:
     name: clima-redes-api
     runtime: python
     plan: free
-    pythonVersion: "3.11"
     buildCommand: pip install -r requirements.txt && python dataset_generator.py && python ml_model.py
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: MONGO_URI
         sync: false
       - key: MONGO_DB
